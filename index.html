@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第4冊 L1運動家的風度-多字音</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Import Map to handle ES Modules for React and Lucide -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+            "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.2"
+        }
+    }
+    </script>
+    
+    <style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #fff7ed; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #fdba74; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #fb923c; 
+        }
+        .progress-bar {
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.2); }
+            50% { transform: scale(1); }
+            75% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .heart-click {
+            animation: heartbeat 0.4s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-orange-50">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { BookOpen, List, Sun, User, LogOut, Zap, Heart, BookX, CheckCircle, XCircle } from 'lucide-react';
+        import confetti from 'canvas-confetti';
+
+        // STORAGE KEYS
+        const STORAGE_PREFIX = 'PolyphonicApp_V1';
+        const KEY_USERS = `${STORAGE_PREFIX}_users`;
+        
+        const getKeyFavorites = (user) => `${STORAGE_PREFIX}_fav_${user}`;
+        const getKeyMistakes = (user) => `${STORAGE_PREFIX}_mistake_${user}`;
+        const getKeyProgress = (user) => `${STORAGE_PREFIX}_progress_${user}`;
+
+        // 資料庫：依據最新提供的資料重建
+        const rawData = [
+            // 1. 飲
+            { id: 101, char: "飲", question: "下而「飲」", answer: "ㄧㄣˋ", meaning: "特指給牲口喝水、使喝水。", sentence: "古代將士長途跋涉，見溪水清澈，遂下馬讓戰馬喝水，此即下而飲。", distractors: ["ㄧㄣˇ"] },
+            { id: 102, char: "飲", question: "「飲」馬長城", answer: "ㄧㄣˋ", meaning: "特指給牲口喝水、使喝水。", sentence: "傳說秦朝大將蒙恬曾率軍北上，駐守邊疆並飲馬長城窟。", distractors: ["ㄧㄣˇ"] },
+            { id: 103, char: "飲", question: "造「飲」輒盡", answer: "ㄧㄣˇ", meaning: "喝、吸食。", sentence: "陶淵明生性嗜酒，親友置酒招待，他總是造飲輒盡（一去喝就喝個精光）。", distractors: ["ㄧㄣˋ"] },
+            { id: 104, char: "飲", question: "「飲」水思源", answer: "ㄧㄣˇ", meaning: "含忍、懷著（隱藏在心中）。", sentence: "做人要飲水思源，不可忘恩負義。", distractors: ["ㄧㄣˋ"] },
+            { id: 105, char: "飲", question: "「飲」恨", answer: "ㄧㄣˇ", meaning: "含忍、懷著（隱藏在心中）。", sentence: "這次比賽只差一分就奪冠，全隊只能飲恨而歸。", distractors: ["ㄧㄣˋ"] },
+
+            // 2. 傳
+            { id: 201, char: "傳", question: "「傳」記", answer: "ㄓㄨㄢˋ", meaning: "記載人物生平事蹟的書籍。", sentence: "這本傳記詳細記錄了賈伯斯傳奇的一生。", distractors: ["ㄔㄨㄢˊ"] },
+            { id: 202, char: "傳", question: "左「傳」", answer: "ㄓㄨㄢˋ", meaning: "解釋經義的書籍（如：春秋三傳）。", sentence: "《左傳》擅長敘事，是研究春秋歷史的重要典籍。", distractors: ["ㄔㄨㄢˊ"] },
+            { id: 203, char: "傳", question: "「傳」神", answer: "ㄔㄨㄢˊ", meaning: "描摹傳寫得很逼真。", sentence: "這幅畫像畫得非常傳神，彷彿真人就在眼前。", distractors: ["ㄓㄨㄢˋ"] },
+            { id: 204, char: "傳", question: "「傳」染", answer: "ㄔㄨㄢˊ", meaning: "轉授、散布、遞送。", sentence: "流行性感冒的傳染力很強，出入公共場所要戴口罩。", distractors: ["ㄓㄨㄢˋ"] },
+            { id: 205, char: "傳", question: "「傳」話", answer: "ㄔㄨㄢˊ", meaning: "轉授、散布、遞送。", sentence: "請幫我傳話給經理，說我明天會準時報到。", distractors: ["ㄓㄨㄢˋ"] },
+            { id: 206, char: "傳", question: "「傳」藝", answer: "ㄔㄨㄢˊ", meaning: "轉授、散布、遞送。", sentence: "老藝師致力於傳藝，希望傳統文化不致失傳。", distractors: ["ㄓㄨㄢˋ"] },
+
+            // 3. 調
+            { id: 301, char: "調", question: "協「調」", answer: "ㄊㄧㄠˊ", meaning: "調和、使和解配合。", sentence: "經過老師的協調，這兩位同學終於握手言和。", distractors: ["ㄉㄧㄠˋ"] },
+            { id: 302, char: "調", question: "「調」味", answer: "ㄊㄧㄠˊ", meaning: "混合、調配。", sentence: "媽媽用少許鹽巴幫這鍋湯調味，味道鮮美極了。", distractors: ["ㄉㄧㄠˋ"] },
+            { id: 303, char: "調", question: "「調」戲", answer: "ㄊㄧㄠˊ", meaning: "戲弄、挑逗。", sentence: "輕薄的言語調戲他人，是非常不尊重的行為。", distractors: ["ㄉㄧㄠˋ"] },
+            { id: 304, char: "調", question: "「調」度", answer: "ㄉㄧㄠˋ", meaning: "派遣、安排。", sentence: "為了趕工，工地主任緊急調度了兩台起重機來支援。", distractors: ["ㄊㄧㄠˊ"] },
+            { id: 305, char: "調", question: "陳腔濫「調」", answer: "ㄉㄧㄠˋ", meaning: "樂曲、格調、意見、風格。", sentence: "他的演講充滿了陳腔濫調，聽得觀眾昏昏欲睡。", distractors: ["ㄊㄧㄠˊ"] },
+            { id: 306, char: "調", question: "單「調」", answer: "ㄉㄧㄠˋ", meaning: "樂曲、格調、意見、風格。", sentence: "每天做重複的工作難免會覺得生活單調乏味。", distractors: ["ㄊㄧㄠˊ"] },
+            { id: 307, char: "調", question: "論「調」", answer: "ㄉㄧㄠˋ", meaning: "樂曲、格調、意見、風格。", sentence: "這種悲觀的論調，對於解決問題一點幫助也沒有。", distractors: ["ㄊㄧㄠˊ"] },
+
+            // 4. 行
+            { id: 401, char: "行", question: "「行」必果", answer: "ㄒㄧㄥˊ", meaning: "做、實踐。", sentence: "君子言必信，行必果（說話守信，做事果斷）。", distractors: ["ㄏㄤˊ"] },
+            { id: 402, char: "行", question: "品「行」", answer: "ㄒㄧㄥˊ", meaning: "行為舉止。", sentence: "學校不僅重視成績，更看重學生的品行修養。", distractors: ["ㄏㄤˊ"] },
+            { id: 403, char: "行", question: "便宜「行」事", answer: "ㄒㄧㄥˊ", meaning: "做事、執行。", sentence: "現場情況緊急，指揮官決定便宜行事，先救人要緊。", distractors: ["ㄏㄤˊ"] },
+            { id: 404, char: "行", question: "排「行」", answer: "ㄏㄤˊ", meaning: "長幼次序。", sentence: "他在家中排行老三，上面還有兩個哥哥。", distractors: ["ㄒㄧㄥˊ"] },
+            { id: 405, char: "行", question: "隔「行」如隔山", answer: "ㄏㄤˊ", meaning: "行業、職業類別。", sentence: "俗話說隔行如隔山，不是這個領域的專家很難理解其中的門道。", distractors: ["ㄒㄧㄥˊ"] },
+
+            // 5. 便
+            { id: 501, char: "便", question: "方「便」", answer: "ㄅㄧㄢˋ", meaning: "順利、簡易、合宜。", sentence: "這裡交通方便，附近就有捷運站。", distractors: ["ㄆㄧㄢˊ"] },
+            { id: 502, char: "便", question: "「便」宜行事", answer: "ㄅㄧㄢˋ", meaning: "權宜變通（此處「便宜」音ㄅㄧㄢˋ ㄧˊ）。", sentence: "既然法規有彈性空間，我們就視情況便宜行事吧。", distractors: ["ㄆㄧㄢˊ"] },
+            { id: 503, char: "便", question: "「便」宜", answer: "ㄆㄧㄢˊ", meaning: "價錢低廉。", sentence: "這家店的衣服既便宜又耐穿，深受學生喜愛。", distractors: ["ㄅㄧㄢˋ"] },
+            { id: 504, char: "便", question: "占小「便」宜", answer: "ㄆㄧㄢˊ", meaning: "不應得的利益。", sentence: "做人要腳踏實地，不要老想著占小便宜。", distractors: ["ㄅㄧㄢˋ"] },
+
+            // 6. 稱
+            { id: 601, char: "稱", question: "「稱」快", answer: "ㄔㄥ", meaning: "叫好、說。", sentence: "惡霸終於被警方逮捕，鄉親們無不拍手稱快。", distractors: ["ㄔㄣˋ"] },
+            { id: 602, char: "稱", question: "「稱」讚", answer: "ㄔㄥ", meaning: "讚許、表揚。", sentence: "老師稱讚他的作文寫得非常有感情。", distractors: ["ㄔㄣˋ"] },
+            { id: 603, char: "稱", question: "勻「稱」", answer: "ㄔㄣˋ", meaning: "適合、相配、均勻。", sentence: "經過長期的健身，他的身材變得非常勻稱結實。", distractors: ["ㄔㄥ"] },
+
+            // 7. 曾
+            { id: 701, char: "曾", question: "「曾」是以為孝乎", answer: "ㄗㄥ", meaning: "竟然、難道（乃、竟）。", sentence: "孔子曾感嘆僅有供養父母是不夠的：「曾是以為孝乎？」（難道這就叫做孝順了嗎？）", distractors: ["ㄘㄥˊ"] },
+            { id: 702, char: "曾", question: "「曾」參", answer: "ㄗㄥ", meaning: "姓氏。", sentence: "曾參是孔子的得意門生，以孝順聞名。", distractors: ["ㄘㄥˊ"] },
+            { id: 703, char: "曾", question: "「曾」經", answer: "ㄘㄥˊ", meaning: "過去的經歷、表示已經過。", sentence: "我曾經去過那座高山，風景美不勝收。", distractors: ["ㄗㄥ"] },
+            { id: 704, char: "曾", question: "未「曾」", answer: "ㄘㄥˊ", meaning: "過去的經歷、表示已經過。", sentence: "我們未曾見面，但我對他的大名早有耳聞。", distractors: ["ㄗㄥ"] },
+
+            // 8. 荷
+            { id: 801, char: "荷", question: "負「荷」", answer: "ㄏㄜˋ", meaning: "承擔、擔負（重量或責任）。", sentence: "這項工作的體力負荷很重，需要強壯的人才能勝任。", distractors: ["ㄏㄜˊ"] },
+            { id: 802, char: "荷", question: "「荷」花", answer: "ㄏㄜˊ", meaning: "植物名（蓮花）。", sentence: "夏天的池塘裡開滿了粉紅色的荷花，隨風搖曳。", distractors: ["ㄏㄜˋ"] },
+
+            // 9. 更
+            { id: 901, char: "更", question: "三「更」半夜", answer: "ㄍㄥ", meaning: "古代夜間計時單位（一夜分五更）。", sentence: "你不要三更半夜大聲喧嘩，會吵到鄰居睡覺。", distractors: ["ㄍㄥˋ"] },
+            { id: 902, char: "更", question: "「更」加", answer: "ㄍㄥˋ", meaning: "愈、再（程度加深）。", sentence: "經過這次教訓，他做事變得更加謹慎小心了。", distractors: ["ㄍㄥ"] },
+
+            // 10. 強
+            { id: 1001, char: "強", question: "倔「強」", answer: "ㄐㄧㄤˋ", meaning: "固執、不順從。", sentence: "這孩子個性倔強，認定了目標就不輕易改變。", distractors: ["ㄑㄧㄤˊ"] },
+            { id: 1002, char: "強", question: "「強」勁", answer: "ㄑㄧㄤˊ", meaning: "力量大的、猛烈的。", sentence: "颱風帶來了強勁的風勢，吹倒了路邊的大樹。", distractors: ["ㄐㄧㄤˋ"] },
+            { id: 1003, char: "強", question: "「強」者", answer: "ㄑㄧㄤˊ", meaning: "有權勢或力量的人。", sentence: "在競技場上，只有不斷努力才能成為真正的強者。", distractors: ["ㄐㄧㄤˋ"] },
+
+            // 11. 諸 (注音相同，但作為題目練習)
+            { id: 1101, char: "諸", question: "公「諸」", answer: "ㄓㄨ", meaning: "「之於」二字的合音（置於）。", sentence: "為了公平起見，委員會決定將決策過程公諸社會大眾。", distractors: ["ㄓㄨˋ"] },
+            { id: 1102, char: "諸", question: "「諸」位", answer: "ㄓㄨ", meaning: "眾多、各個。", sentence: "諸位嘉賓請就座，典禮馬上就要開始了。", distractors: ["ㄓㄨˋ"] },
+            { id: 1103, char: "諸", question: "「諸」多", answer: "ㄓㄨ", meaning: "眾多、各個。", sentence: "由於時間倉促，招待不周之處尚請諸多包涵。", distractors: ["ㄓㄨˋ"] },
+
+            // 12. 樂
+            { id: 1201, char: "樂", question: "快「樂」", answer: "ㄌㄜˋ", meaning: "喜悅、歡喜。", sentence: "助人為快樂之本，幫助別人自己也會感到開心。", distractors: ["ㄩㄝˋ", "ㄧㄠˋ"] },
+            { id: 1202, char: "樂", question: "寓教於「樂」", answer: "ㄌㄜˋ", meaning: "寄託（將教育寄託在樂趣中）。", sentence: "這款遊戲設計得很好，真正做到了寓教於樂。", distractors: ["ㄩㄝˋ", "ㄧㄠˋ"] },
+            { id: 1203, char: "樂", question: "音「樂」", answer: "ㄩㄝˋ", meaning: "有規律而悅耳的聲音。", sentence: "聽輕柔的音樂可以幫助放鬆心情。", distractors: ["ㄌㄜˋ", "ㄧㄠˋ"] },
+            { id: 1204, char: "樂", question: "「樂」山「樂」水", answer: "ㄧㄠˋ", meaning: "喜好、欣賞（多用於古文）。", sentence: "孔子說：「仁者樂山，智者樂水。」（仁慈的人喜愛山）。", distractors: ["ㄌㄜˋ", "ㄩㄝˋ"] },
+        ];
+
+        // --- Helper Functions ---
+        const shuffleArray = (array) => {
+          const newArray = [...array];
+          for (let i = newArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+          }
+          return newArray;
+        };
+
+        const playSound = (type) => {
+            const audioPath = type === 'success' ? 'sounds/correct.mp3' : 'sounds/fail.mp3';
+            const audio = new Audio(audioPath);
+            audio.play().catch(err => console.log('Audio play error:', err));
+        }
+
+        const App = () => {
+          const [mode, setMode] = useState('menu'); // menu, study, quiz, favorites, mistakes
+          const [currentUser, setCurrentUser] = useState(null);
+          const [users, setUsers] = useState([]);
+          const [favorites, setFavorites] = useState(new Set());
+          const [mistakes, setMistakes] = useState(new Set());
+
+          useEffect(() => {
+            try {
+                const storedUsers = JSON.parse(localStorage.getItem(KEY_USERS)) || [];
+                setUsers(storedUsers);
+            } catch (e) {
+                console.error("Error loading users", e);
+            }
+          }, []);
+
+          useEffect(() => {
+            if (currentUser) {
+                try {
+                    const favs = JSON.parse(localStorage.getItem(getKeyFavorites(currentUser))) || [];
+                    setFavorites(new Set(favs));
+                    const mists = JSON.parse(localStorage.getItem(getKeyMistakes(currentUser))) || [];
+                    setMistakes(new Set(mists));
+                } catch (e) { console.error("Error loading user data", e); }
+            } else {
+                setFavorites(new Set());
+                setMistakes(new Set());
+            }
+          }, [currentUser]);
+
+          const handleLogin = (name) => {
+            if (!name.trim()) return;
+            const newUsers = Array.from(new Set([name, ...users]));
+            setUsers(newUsers);
+            localStorage.setItem(KEY_USERS, JSON.stringify(newUsers));
+            setCurrentUser(name);
+            setMode('menu');
+          };
+
+          const handleLogout = () => {
+            setCurrentUser(null);
+            setMode('menu');
+          };
+
+          const toggleFavorite = useCallback((id) => {
+            if (!currentUser) return;
+            const newFavorites = new Set(favorites);
+            if (newFavorites.has(id)) newFavorites.delete(id);
+            else newFavorites.add(id);
+            setFavorites(newFavorites);
+            localStorage.setItem(getKeyFavorites(currentUser), JSON.stringify([...newFavorites]));
+          }, [favorites, currentUser]);
+
+          const addMistake = useCallback((id) => {
+            if (!currentUser) return;
+            const newMistakes = new Set(mistakes);
+            if (!newMistakes.has(id)) {
+                newMistakes.add(id);
+                setMistakes(newMistakes);
+                localStorage.setItem(getKeyMistakes(currentUser), JSON.stringify([...newMistakes]));
+            }
+          }, [mistakes, currentUser]);
+
+          if (!currentUser) return <LoginView users={users} onLogin={handleLogin} />;
+          
+          return (
+            <div className="min-h-screen bg-orange-50 text-stone-800 font-sans">
+              <header className="bg-orange-600 text-white p-4 shadow-lg sticky top-0 z-20">
+                <div className="max-w-4xl mx-auto flex justify-between items-center">
+                  <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setMode('menu')}>
+                    <BookOpen size={28} />
+                    <h1 className="text-xl md:text-2xl font-bold tracking-wider">第4冊 L1運動家的風度-多字音</h1>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="hidden md:flex items-center bg-orange-700 px-3 py-1 rounded-full text-sm">
+                        <User size={16} className="mr-2"/>
+                        <span className="font-bold truncate max-w-[100px]">{currentUser}</span>
+                    </div>
+                    {mode !== 'menu' && (
+                        <button onClick={() => setMode('menu')} className="text-orange-100 hover:text-white transition font-medium">回首頁</button>
+                    )}
+                    <button onClick={handleLogout} className="flex items-center text-orange-200 hover:text-white transition" title="登出">
+                        <LogOut size={20} />
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <main className="max-w-4xl mx-auto p-4 md:p-6">
+                {mode === 'menu' && (
+                  <div className="flex flex-col items-center justify-center space-y-8 py-12 animate-in fade-in duration-500">
+                    <div className="text-center space-y-4">
+                      <div className="bg-orange-100 p-4 rounded-full inline-block mb-2">
+                        <Sun size={48} className="text-orange-500" />
+                      </div>
+                      <h2 className="text-3xl font-bold text-orange-900">歡迎回來，{currentUser}</h2>
+                      <p className="text-stone-600 text-lg max-w-md">請選擇下列功能開始學習</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                      <MenuButton onClick={() => setMode('study')} icon={<List size={40} className="text-orange-600" />} title="全表瀏覽" desc="完整檢視多音字、字義與例句" />
+                      <MenuButton onClick={() => setMode('quiz')} icon={<Zap size={40} className="text-orange-600" />} title="閃電刷題" desc="瀑布流式快速挑戰" />
+                      <MenuButton onClick={() => setMode('favorites')} icon={<Heart size={40} className="text-red-500 fill-red-500" />} title="我的最愛" desc="複習您收藏的重點題目" highlight="red" />
+                      <MenuButton onClick={() => setMode('mistakes')} icon={<BookX size={40} className="text-stone-600" />} title="錯題複習" desc="針對答錯的題目加強練習" highlight="stone" />
+                    </div>
+                  </div>
+                )}
+
+                {mode === 'study' && <StudyView data={rawData} favorites={favorites} onToggleFavorite={toggleFavorite} title="多音字資料庫" />}
+                {mode === 'favorites' && <StudyView data={rawData.filter(item => favorites.has(item.id))} favorites={favorites} onToggleFavorite={toggleFavorite} title="我的最愛清單" emptyMessage="您還沒有加入任何最愛題目喔！" />}
+                {mode === 'mistakes' && <StudyView data={rawData.filter(item => mistakes.has(item.id))} favorites={favorites} onToggleFavorite={toggleFavorite} title="錯題複習本" emptyMessage="太棒了！目前沒有錯題紀錄。" />}
+                {mode === 'quiz' && <WaterfallQuizView data={rawData} currentUser={currentUser} favorites={favorites} onToggleFavorite={toggleFavorite} onAddMistake={addMistake} onExit={() => setMode('menu')} />}
+              </main>
+            </div>
+          );
+        };
+
+        const MenuButton = ({ onClick, icon, title, desc, highlight = "orange" }) => {
+            const bgClass = highlight === "red" ? "bg-red-50" : highlight === "stone" ? "bg-stone-100" : "bg-orange-100";
+            return (
+                <button onClick={onClick} className="flex flex-col items-center p-8 bg-white rounded-2xl shadow-sm hover:shadow-xl hover:bg-orange-50 transition border-2 border-orange-100 hover:border-orange-300 group">
+                    <div className={`${bgClass} p-4 rounded-full mb-4 group-hover:scale-110 transition`}>{icon}</div>
+                    <h3 className="text-xl font-bold text-orange-900">{title}</h3>
+                    <p className="text-stone-500 mt-2">{desc}</p>
+                </button>
+            )
+        }
+
+        const LoginView = ({ users, onLogin }) => {
+            const [inputName, setInputName] = useState("");
+            return (
+                <div className="min-h-screen bg-orange-50 flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border-2 border-orange-100">
+                        <div className="text-center mb-8">
+                            <div className="bg-orange-100 p-3 rounded-full inline-block mb-4"><BookOpen size={40} className="text-orange-600" /></div>
+                            <h1 className="text-2xl font-bold text-orange-900">多音字學習App</h1>
+                            <p className="text-stone-500 mt-2">請輸入姓名以開始學習</p>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); if(inputName.trim()) onLogin(inputName.trim()); }} className="space-y-4">
+                            <input type="text" value={inputName} onChange={(e) => setInputName(e.target.value)} placeholder="輸入您的名字" className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-lg" autoFocus />
+                            <button type="submit" disabled={!inputName.trim()} className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-lg transition disabled:opacity-50">開始使用</button>
+                        </form>
+                        {users.length > 0 && (
+                            <div className="mt-8">
+                                <div className="relative mb-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-200"></div></div><div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-stone-500">快速登入</span></div></div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                    {users.map((user, idx) => <button key={idx} onClick={() => onLogin(user)} className="px-4 py-2 bg-stone-100 hover:bg-orange-100 text-stone-700 hover:text-orange-700 rounded-full text-sm font-medium transition">{user}</button>)}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const StudyView = ({ data, favorites, onToggleFavorite, title, emptyMessage = "沒有找到符合的資料" }) => {
+          const [searchTerm, setSearchTerm] = useState("");
+          const filteredData = data.filter(item => item.question.includes(searchTerm) || item.answer.includes(searchTerm));
+
+          return (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-orange-200">
+                <h2 className="text-xl font-bold text-orange-900 flex items-center"><List className="mr-2" size={24} />{title}</h2>
+                <input type="text" placeholder="搜尋題目、注音..." className="px-4 py-2 rounded-lg border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 w-full md:w-64 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
+              
+              {filteredData.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {filteredData.map((item) => (
+                    <div key={item.id} className="bg-white rounded-xl shadow-sm border border-orange-100 overflow-hidden hover:shadow-md transition">
+                        <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-start">
+                             <div className="flex items-center gap-3">
+                                <span className="bg-orange-200 text-orange-800 text-xs font-bold px-2 py-1 rounded">#{item.id}</span>
+                                <h3 className="text-xl font-bold text-stone-800">{item.question}</h3>
+                             </div>
+                             <div className="flex items-center gap-3">
+                                <span className="text-2xl font-bold text-orange-600 font-mono tracking-widest">{item.answer}</span>
+                                <button onClick={() => onToggleFavorite(item.id)} className={`transition transform active:scale-90 p-1 rounded-full hover:bg-orange-100 ${favorites.has(item.id) ? 'text-red-500' : 'text-stone-300 hover:text-red-400'}`}>
+                                    <Heart size={20} className={favorites.has(item.id) ? "fill-current heart-click" : ""} />
+                                </button>
+                             </div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            <div>
+                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">字義補充</span>
+                                <p className="text-stone-700 mt-1">{item.meaning}</p>
+                            </div>
+                            <div className="bg-stone-50 p-3 rounded-lg border border-stone-100">
+                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">完整例句</span>
+                                <p className="text-stone-600 mt-1 leading-relaxed">{item.sentence}</p>
+                            </div>
+                        </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-12 text-center text-stone-400 bg-white rounded-xl border border-dashed border-stone-300">
+                    <List size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>{emptyMessage}</p>
+                </div>
+              )}
+              <div className="text-center text-sm text-stone-500 mt-4">顯示 {filteredData.length} 筆資料</div>
+            </div>
+          );
+        };
+
+        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onExit }) => {
+          const [quizData, setQuizData] = useState([]);
+          const [selections, setSelections] = useState({});
+          const userProgressKey = getKeyProgress(currentUser);
+
+          useEffect(() => {
+            const preparedData = data.map(item => ({ ...item, options: shuffleArray([item.answer, ...item.distractors]) }));
+            setQuizData(preparedData);
+            try {
+                const savedProgress = localStorage.getItem(userProgressKey);
+                if (savedProgress) setSelections(JSON.parse(savedProgress));
+            } catch (e) { console.error("Failed to load progress", e); }
+          }, [data, userProgressKey]);
+
+          const handleSelect = (questionId, option) => {
+            const newSelections = { ...selections, [questionId]: option };
+            setSelections(newSelections);
+            localStorage.setItem(userProgressKey, JSON.stringify(newSelections));
+            const currentQuestion = data.find(item => item.id === questionId);
+            const isCorrect = option === currentQuestion.answer;
+            if (isCorrect) {
+                playSound('success');
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            } else {
+                playSound('error');
+                onAddMistake(questionId);
+            }
+          };
+          
+          const completedCount = Object.keys(selections).length;
+          const progress = Math.round((completedCount / data.length) * 100);
+
+          return (
+            <div className="max-w-4xl mx-auto pb-20">
+              <div className="sticky top-16 z-10 bg-orange-50/95 backdrop-blur-sm pt-4 pb-2 border-b border-orange-200 mb-6 shadow-sm">
+                  <div className="flex justify-between items-center mb-2 px-2">
+                    <div>
+                        <h2 className="text-xl font-bold text-orange-900 flex items-center gap-2"><Zap size={24} className="fill-orange-500 text-orange-600"/>閃電刷題</h2>
+                        <p className="text-xs text-stone-500 mt-1">已完成: {completedCount} / {data.length} 題</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => { if(window.confirm('確定要清空進度重來嗎？')) { setSelections({}); localStorage.removeItem(userProgressKey); window.scrollTo(0,0); }}} className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 font-medium text-xs sm:text-sm transition">重置</button>
+                        <button onClick={onExit} className="px-3 py-1.5 bg-stone-600 text-white rounded-lg hover:bg-stone-700 font-medium text-xs sm:text-sm transition">暫停</button>
+                    </div>
+                  </div>
+                  <div className="w-full bg-orange-200 h-2.5 rounded-full overflow-hidden"><div className="bg-orange-600 h-2.5 rounded-full progress-bar shadow-[0_0_10px_rgba(249,115,22,0.5)]" style={{ width: `${progress}%` }}></div></div>
+              </div>
+
+              <div className="space-y-6">
+                {quizData.map((item) => {
+                    const userSelection = selections[item.id];
+                    const isAnswered = userSelection !== undefined;
+                    const isCorrect = userSelection === item.answer;
+                    
+                    return (
+                        <div key={item.id} className={`bg-white rounded-xl shadow-sm border-2 transition-all duration-300 overflow-hidden ${isAnswered ? (isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50') : 'border-orange-100'}`}>
+                            <div className="p-4 border-b border-black/5 flex items-start gap-3">
+                                <span className="bg-orange-100 text-orange-800 font-mono font-bold px-2 py-1 rounded text-sm shrink-0 mt-1">#{item.id}</span>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(item.id); }} className={`transition transform active:scale-90 p-1 rounded-full -ml-2 ${favorites.has(item.id) ? 'text-red-500' : 'text-stone-300 hover:text-red-400'}`}>
+                                            <Heart size={20} className={favorites.has(item.id) ? "fill-current heart-click" : ""} />
+                                        </button>
+                                        <h3 className="text-xl md:text-2xl font-bold text-stone-800 leading-snug">{item.question}</h3>
+                                    </div>
+                                </div>
+                                {isAnswered && <div className="ml-auto shrink-0">{isCorrect ? <CheckCircle className="text-green-500" /> : <XCircle className="text-red-500" />}</div>}
+                            </div>
+                            <div className="p-4 bg-white/50">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {item.options.map((option, idx) => {
+                                        let btnClass = "py-4 px-2 rounded-lg font-bold text-2xl md:text-3xl transition-all border-2 relative ";
+                                        if (isAnswered) {
+                                            if (option === item.answer) btnClass += "bg-green-500 text-white border-green-600 shadow-md";
+                                            else if (option === userSelection && !isCorrect) btnClass += "bg-red-500 text-white border-red-600 shadow-md";
+                                            else btnClass += "bg-stone-100 text-stone-400 border-transparent opacity-50";
+                                        } else {
+                                            btnClass += "bg-white text-stone-700 border-stone-200 hover:border-orange-400 hover:bg-orange-50 active:scale-95";
+                                        }
+                                        return <button key={idx} onClick={() => !isAnswered && handleSelect(item.id, option)} disabled={isAnswered} className={btnClass}>{option}</button>;
+                                    })}
+                                </div>
+                                {isAnswered && (
+                                    <div className="mt-4 pt-4 border-t border-black/5 animate-in fade-in slide-in-from-top-2">
+                                        <div className="bg-white/60 p-3 rounded-lg border border-stone-100">
+                                            <p className="text-sm font-bold text-stone-500 mb-1">字義補充</p>
+                                            <p className="text-stone-800 mb-3">{item.meaning}</p>
+                                            <p className="text-sm font-bold text-stone-500 mb-1">例句</p>
+                                            <p className="text-stone-600 italic leading-relaxed">{item.sentence}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+              </div>
+              {progress === 100 && (
+                <div className="mt-8 p-8 bg-green-100 rounded-2xl text-center border-2 border-green-300 animate-in zoom-in duration-300">
+                    <h3 className="text-2xl font-bold text-green-800 mb-2">恭喜完成所有題目！</h3>
+                    <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="mt-4 text-green-700 underline hover:text-green-900">回到頂部</button>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
