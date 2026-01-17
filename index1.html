@@ -3,23 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>第4冊 L1 運動家的風度-字音練習 (Firebase版)</title>
+    <title>第4冊 L1 運動家的風度-字音練習</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Import Map to handle ES Modules for React, Lucide, and Firebase -->
+    <!-- Import Map to handle ES Modules for React and Lucide -->
     <script type="importmap">
     {
         "imports": {
             "react": "https://esm.sh/react@18.2.0",
             "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
             "lucide-react": "https://esm.sh/lucide-react@0.263.1",
-            "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.2",
-            "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-            "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+            "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.2"
         }
     }
     </script>
@@ -63,26 +60,6 @@
         .heart-click {
             animation: heartbeat 0.4s ease-in-out;
         }
-        /* Status Dot styles */
-        .status-dot {
-            height: 8px;
-            width: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-        }
-        .status-loading { background-color: #eab308; box-shadow: 0 0 4px #eab308; } /* Yellow */
-        .status-success { background-color: #22c55e; box-shadow: 0 0 4px #22c55e; } /* Green */
-        .status-error { background-color: #ef4444; box-shadow: 0 0 4px #ef4444; }   /* Red */
-        
-        /* Delete button styling */
-        .delete-btn {
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .user-btn-wrapper:hover .delete-btn {
-            opacity: 1;
-        }
     </style>
 </head>
 <body class="bg-orange-50">
@@ -91,42 +68,19 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { BookOpen, HelpCircle, CheckCircle, XCircle, ArrowRight, RefreshCcw, List, Sun, User, LogOut, Zap, Heart, BookX, Cloud, Trash2 } from 'lucide-react';
+        import { BookOpen, HelpCircle, CheckCircle, XCircle, ArrowRight, RefreshCcw, List, Sun, User, LogOut, Zap, Heart, BookX } from 'lucide-react';
         import confetti from 'canvas-confetti';
+
+        // STORAGE KEYS
+        const STORAGE_PREFIX = 'Chinese4-L1-3';
+        const KEY_USERS = `${STORAGE_PREFIX}_users`;
         
-        // Firebase Imports
-        import { initializeApp } from 'firebase/app';
-        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-        import { getFirestore, doc, onSnapshot, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDoc } from 'firebase/firestore';
+        // Helper to get dynamic keys
+        const getKeyFavorites = (user) => `${STORAGE_PREFIX}_fav_${user}`;
+        const getKeyMistakes = (user) => `${STORAGE_PREFIX}_mistake_${user}`;
+        const getKeyProgress = (user) => `${STORAGE_PREFIX}_progress_${user}`;
 
-        // --- FIREBASE CONFIGURATION ---
-        // 請在此處填入您的 Firebase 設定
-        const firebaseConfig = {
-  apiKey: "AIzaSyAxQFt76ZPXE7d0i1XeNZ1yiiD2WYNIfHs",
-  authDomain: "chinese-learning-47f4d.firebaseapp.com",
-  projectId: "chinese-learning-47f4d",
-  storageBucket: "chinese-learning-47f4d.firebasestorage.app",
-  messagingSenderId: "76289812052",
-  appId: "1:76289812052:web:898384a916f9f341f62fc1"
-};
-
-        // Initialize Firebase
-        let db;
-        let auth;
-        try {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-        } catch (error) {
-            console.error("Firebase Initialization Error:", error);
-        }
-
-        // --- COLLECTION DEFINITION ---
-        // 從原始程式碼的 STORAGE_PREFIX 提取
-        const COLLECTION_NAME = 'Chinese4-L1-3';
-        const GLOBAL_DOC_ID = 'global_users'; // 用來存儲使用者列表的特定文件 ID
-
-        // 資料庫：字音辨正 (完整收錄 - 原始內容保留)
+        // 資料庫：字音辨正 (完整收錄)
         const rawData = [
             // 1. 飲
             { id: 1, question: "下而「飲」", answer: "ㄧㄣˋ", distractors: ["ㄧㄣˇ", "ㄧㄥˇ"] },
@@ -358,146 +312,44 @@
           const [users, setUsers] = useState([]);
           const [favorites, setFavorites] = useState(new Set());
           const [mistakes, setMistakes] = useState(new Set());
-          
-          // Firebase States
-          const [isFirebaseReady, setIsFirebaseReady] = useState(false);
-          const [status, setStatus] = useState('loading'); // loading, success, error
 
-          // Initialize Firebase Auth
+          // Load users on mount
           useEffect(() => {
-            if(!auth) {
-                setStatus('error');
-                return;
+            try {
+                const storedUsers = JSON.parse(localStorage.getItem(KEY_USERS)) || [];
+                setUsers(storedUsers);
+            } catch (e) {
+                console.error("Error loading users", e);
             }
-            const unsubscribe = onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    setIsFirebaseReady(true);
-                } else {
-                    signInAnonymously(auth).catch((error) => {
-                        console.error("Auth failed", error);
-                        setStatus('error');
-                    });
-                }
-            });
-            return () => unsubscribe();
           }, []);
 
-          // Listen to Global User List
+          // Load user data when currentUser changes
           useEffect(() => {
-            if (!isFirebaseReady || !db) return;
-            
-            setStatus('loading');
-            const unsubscribe = onSnapshot(doc(db, COLLECTION_NAME, GLOBAL_DOC_ID), 
-                (docSnapshot) => {
-                    if (docSnapshot.exists()) {
-                        setUsers(docSnapshot.data().users || []);
-                        setStatus('success');
-                    } else {
-                        // Create global doc if not exists
-                        setDoc(doc(db, COLLECTION_NAME, GLOBAL_DOC_ID), { users: [] })
-                        .then(() => setStatus('success'))
-                        .catch(e => {
-                            console.error(e);
-                            setStatus('error');
-                        });
-                        setUsers([]);
-                    }
-                }, 
-                (error) => {
-                    console.error("Global users fetch error", error);
-                    setStatus('error');
+            if (currentUser) {
+                try {
+                    // Load Favorites
+                    const favs = JSON.parse(localStorage.getItem(getKeyFavorites(currentUser))) || [];
+                    setFavorites(new Set(favs));
+
+                    // Load Mistakes
+                    const mists = JSON.parse(localStorage.getItem(getKeyMistakes(currentUser))) || [];
+                    setMistakes(new Set(mists));
+                } catch (e) {
+                    console.error("Error loading user data", e);
                 }
-            );
-            return () => unsubscribe();
-          }, [isFirebaseReady]);
-
-          // Listen to Specific User Data
-          useEffect(() => {
-            if (!currentUser || !isFirebaseReady || !db) return;
-
-            setStatus('loading');
-            const unsubscribe = onSnapshot(doc(db, COLLECTION_NAME, currentUser), 
-                (docSnapshot) => {
-                    if (docSnapshot.exists()) {
-                        const data = docSnapshot.data();
-                        setFavorites(new Set(data.favorites || []));
-                        setMistakes(new Set(data.mistakes || []));
-                        setStatus('success');
-                    } else {
-                        // New user doc init handled in login
-                        setFavorites(new Set());
-                        setMistakes(new Set());
-                        setStatus('success');
-                    }
-                },
-                (error) => {
-                    console.error("User data fetch error", error);
-                    setStatus('error');
-                }
-            );
-
-            return () => unsubscribe();
-          }, [currentUser, isFirebaseReady]);
-
-
-          // --- Firebase Operations ---
-
-          const handleLogin = async (name) => {
-            if (!name.trim() || !isFirebaseReady) return;
-            const userName = name.trim();
-            
-            try {
-                // If user not in list, add to global list
-                if (!users.includes(userName)) {
-                    await updateDoc(doc(db, COLLECTION_NAME, GLOBAL_DOC_ID), {
-                        users: arrayUnion(userName)
-                    });
-                }
-                
-                // Ensure user document exists
-                const userDocRef = doc(db, COLLECTION_NAME, userName);
-                const userDoc = await getDoc(userDocRef);
-                
-                if(!userDoc.exists()) {
-                    await setDoc(userDocRef, {
-                        favorites: [],
-                        mistakes: [],
-                        progress: {}
-                    });
-                }
-
-                setCurrentUser(userName);
-                setMode('menu');
-            } catch (e) {
-                console.error("Login failed", e);
-                alert("登入失敗，請檢查網路連線");
+            } else {
+                setFavorites(new Set());
+                setMistakes(new Set());
             }
-          };
-          
-          const handleDeleteUser = async (userName) => {
-             if (!isFirebaseReady) return;
-             
-             // Double confirmation
-             if (!window.confirm(`您確定要刪除使用者「${userName}」的紀錄嗎？`)) return;
-             if (!window.confirm(`再次確認：這將永久刪除「${userName}」的所有進度，無法復原！`)) return;
-             
-             try {
-                setStatus('loading');
-                
-                // 1. Remove from global list
-                await updateDoc(doc(db, COLLECTION_NAME, GLOBAL_DOC_ID), {
-                    users: arrayRemove(userName)
-                });
-                
-                // 2. Delete the user document
-                await deleteDoc(doc(db, COLLECTION_NAME, userName));
-                
-                setStatus('success');
-             } catch (e) {
-                console.error("Delete user failed", e);
-                alert("刪除失敗，請稍後再試");
-                setStatus('error');
-             }
+          }, [currentUser]);
+
+          const handleLogin = (name) => {
+            if (!name.trim()) return;
+            const newUsers = Array.from(new Set([name, ...users])); // Add to front, unique
+            setUsers(newUsers);
+            localStorage.setItem(KEY_USERS, JSON.stringify(newUsers));
+            setCurrentUser(name);
+            setMode('menu'); // Ensure we are on menu after login
           };
 
           const handleLogout = () => {
@@ -505,84 +357,34 @@
             setMode('menu');
           };
 
-          const toggleFavorite = useCallback(async (id) => {
-            if (!currentUser || !isFirebaseReady) return;
+          const toggleFavorite = useCallback((id) => {
+            if (!currentUser) return;
             
             const newFavorites = new Set(favorites);
-            let op;
-            
             if (newFavorites.has(id)) {
                 newFavorites.delete(id);
-                op = arrayRemove(id);
             } else {
                 newFavorites.add(id);
-                op = arrayUnion(id);
             }
             
-            // Optimistic Update
             setFavorites(newFavorites);
-            
-            try {
-                await updateDoc(doc(db, COLLECTION_NAME, currentUser), {
-                    favorites: op
-                });
-            } catch (e) {
-                console.error("Update favorites failed", e);
-                setStatus('error');
-            }
-          }, [favorites, currentUser, isFirebaseReady]);
+            localStorage.setItem(getKeyFavorites(currentUser), JSON.stringify([...newFavorites]));
+          }, [favorites, currentUser]);
 
-          const addMistake = useCallback(async (id) => {
-            if (!currentUser || !isFirebaseReady) return;
+          const addMistake = useCallback((id) => {
+            if (!currentUser) return;
             
             const newMistakes = new Set(mistakes);
             if (!newMistakes.has(id)) {
                 newMistakes.add(id);
-                setMistakes(newMistakes); // Optimistic
-                
-                try {
-                    await updateDoc(doc(db, COLLECTION_NAME, currentUser), {
-                        mistakes: arrayUnion(id)
-                    });
-                } catch (e) {
-                     console.error("Update mistakes failed", e);
-                }
+                setMistakes(newMistakes);
+                localStorage.setItem(getKeyMistakes(currentUser), JSON.stringify([...newMistakes]));
             }
-          }, [mistakes, currentUser, isFirebaseReady]);
-
-          const saveProgress = async (newSelections) => {
-              if(!currentUser || !isFirebaseReady) return;
-              try {
-                  await setDoc(doc(db, COLLECTION_NAME, currentUser), {
-                      progress: newSelections
-                  }, { merge: true });
-              } catch(e) {
-                  console.error("Save progress failed", e);
-                  setStatus('error');
-              }
-          }
-          
-          const resetProgress = async () => {
-              if(!currentUser || !isFirebaseReady) return;
-              try {
-                  await updateDoc(doc(db, COLLECTION_NAME, currentUser), {
-                      progress: {}
-                  });
-              } catch(e) {
-                  console.error("Reset progress failed", e);
-              }
-          }
+          }, [mistakes, currentUser]);
 
           // If no user is logged in, show Login Screen
           if (!currentUser) {
-            return (
-                <LoginView 
-                    users={users} 
-                    onLogin={handleLogin} 
-                    onDeleteUser={handleDeleteUser}
-                    status={status} 
-                />
-            );
+            return <LoginView users={users} onLogin={handleLogin} />;
           }
           
           return (
@@ -599,12 +401,6 @@
                   </div>
                   
                   <div className="flex items-center space-x-4">
-                    {/* Cloud Status Indicator */}
-                    <div className="hidden md:flex items-center text-xs bg-orange-700 px-2 py-1 rounded">
-                        <span className={`status-dot ${status === 'loading' ? 'status-loading' : status === 'success' ? 'status-success' : 'status-error'}`}></span>
-                        {status === 'loading' ? '讀取資料中...' : status === 'success' ? '已同步' : '雲端同步失敗'}
-                    </div>
-
                     <div className="hidden md:flex items-center bg-orange-700 px-3 py-1 rounded-full text-sm">
                         <User size={16} className="mr-2"/>
                         <span className="font-bold truncate max-w-[100px]">{currentUser}</span>
@@ -727,11 +523,7 @@
                         favorites={favorites}
                         onToggleFavorite={toggleFavorite}
                         onAddMistake={addMistake}
-                        onSaveProgress={saveProgress}
-                        onResetProgress={resetProgress}
                         onExit={() => setMode('menu')} 
-                        db={db}
-                        collectionName={COLLECTION_NAME}
                     />
                 )}
               </main>
@@ -740,7 +532,7 @@
         };
 
         // --- Login View Component ---
-        const LoginView = ({ users, onLogin, onDeleteUser, status }) => {
+        const LoginView = ({ users, onLogin }) => {
             const [inputName, setInputName] = useState("");
 
             const handleSubmit = (e) => {
@@ -757,11 +549,6 @@
                             </div>
                             <h1 className="text-2xl font-bold text-orange-900">第4冊 L1 運動家的風度-字音練習</h1>
                             <p className="text-stone-500 mt-2">請輸入姓名以開始學習</p>
-                            
-                            <div className="mt-4 flex justify-center items-center gap-2 text-sm text-stone-400">
-                                <span className={`status-dot ${status === 'loading' ? 'status-loading' : status === 'success' ? 'status-success' : 'status-error'}`}></span>
-                                {status === 'loading' ? '雲端連線中...' : status === 'success' ? '雲端已連線' : '連線異常'}
-                            </div>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
@@ -784,45 +571,29 @@
                             </button>
                         </form>
 
-                        <div className="mt-8">
-                            <div className="relative mb-6">
-                                <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-stone-200"></div>
+                        {users.length > 0 && (
+                            <div className="mt-8">
+                                <div className="relative mb-4">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-stone-200"></div>
+                                    </div>
+                                    <div className="relative flex justify-center text-sm">
+                                        <span className="px-2 bg-white text-stone-500">快速登入</span>
+                                    </div>
                                 </div>
-                                <div className="relative flex justify-center text-sm">
-                                    <span className="px-2 bg-white text-stone-500">快速登入</span>
-                                </div>
-                            </div>
-                            
-                            {users && users.length > 0 ? (
-                                <div className="flex flex-wrap gap-4 justify-center">
+                                <div className="flex flex-wrap gap-2 justify-center">
                                     {users.map((user, idx) => (
-                                        <div key={idx} className="relative group user-btn-wrapper">
-                                            <button
-                                                onClick={() => onLogin(user)}
-                                                className="px-6 py-3 bg-stone-100 hover:bg-orange-100 text-stone-700 hover:text-orange-700 rounded-lg text-lg font-medium transition w-full min-w-[100px]"
-                                            >
-                                                {user}
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onDeleteUser(user);
-                                                }}
-                                                className="delete-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm"
-                                                title="刪除此使用者"
-                                            >
-                                                <XCircle size={16} />
-                                            </button>
-                                        </div>
+                                        <button
+                                            key={idx}
+                                            onClick={() => onLogin(user)}
+                                            className="px-4 py-2 bg-stone-100 hover:bg-orange-100 text-stone-700 hover:text-orange-700 rounded-full text-sm font-medium transition"
+                                        >
+                                            {user}
+                                        </button>
                                     ))}
                                 </div>
-                            ) : (
-                                <div className="text-center text-stone-400 py-4 bg-stone-50 rounded-xl border border-stone-100 border-dashed">
-                                    <p>尚無挑戰者紀錄，歡迎加入！</p>
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
@@ -903,33 +674,33 @@
         };
 
         // --- Waterfall Quiz View Component ---
-        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onSaveProgress, onResetProgress, onExit, db, collectionName }) => {
+        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onExit }) => {
+          // Store the generated quiz data (options shuffled once)
           const [quizData, setQuizData] = useState([]);
+          // Store user selections: { questionId: selectedOption }
           const [selections, setSelections] = useState({});
           
-          // Initial Load
+          const userProgressKey = getKeyProgress(currentUser);
+
+          // Initialize quiz data with options on mount
           useEffect(() => {
             const preparedData = data.map(item => {
+              // Combine answer and explicit distractors, then shuffle
               const options = shuffleArray([item.answer, ...item.distractors]);
               return { ...item, options };
             });
             setQuizData(preparedData);
 
-            // Fetch progress from Firestore directly to be sure (though App passes no props for it, we rely on App's logic or fetch here. 
-            // In the App component, we didn't pass 'progress' state down, so let's fetch it once here or rely on parent.
-            // Improved flow: Fetch specifically for this component or use onSnapshot in App.
-            // For simplicity based on prompt constraints, we'll do a one-time fetch or listen here if not passed.
-            // Since App handles user doc snapshot but doesn't pass 'progress' object explicitly in props (I missed adding it to App state),
-            // let's do a quick fetch here to sync up.
-            
-            if(currentUser && db) {
-                 getDoc(doc(db, collectionName, currentUser)).then(docSnap => {
-                     if(docSnap.exists()) {
-                         setSelections(docSnap.data().progress || {});
-                     }
-                 });
+            // Load saved progress
+            try {
+                const savedProgress = localStorage.getItem(userProgressKey);
+                if (savedProgress) {
+                    setSelections(JSON.parse(savedProgress));
+                }
+            } catch (e) {
+                console.error("Failed to load progress", e);
             }
-          }, [data, currentUser, db, collectionName]);
+          }, [data, userProgressKey]);
 
           const handleSelect = (questionId, option) => {
             const newSelections = {
@@ -937,8 +708,8 @@
               [questionId]: option
             };
             setSelections(newSelections);
-            // Save to Firestore
-            onSaveProgress(newSelections);
+            // Save immediately
+            localStorage.setItem(userProgressKey, JSON.stringify(newSelections));
 
             // Sound and Confetti
             const currentQuestion = data.find(item => item.id === questionId);
@@ -953,6 +724,7 @@
                 });
             } else {
                 playSound('error');
+                // Record mistake
                 onAddMistake(questionId);
             }
           };
@@ -978,7 +750,7 @@
                                 if(window.confirm('確定要重新開始嗎？您將遺失目前的作答紀錄。')) {
                                     if(window.confirm('再次確認：真的要清空所有進度重來嗎？(此動作無法復原)')) {
                                         setSelections({});
-                                        onResetProgress();
+                                        localStorage.removeItem(userProgressKey);
                                         window.scrollTo(0,0);
                                     }
                                 }
