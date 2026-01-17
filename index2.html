@@ -358,7 +358,6 @@
           const [users, setUsers] = useState([]);
           const [favorites, setFavorites] = useState(new Set());
           const [mistakes, setMistakes] = useState(new Set());
-          const [userProgress, setUserProgress] = useState({}); // New: Store User Progress in App
           
           // Firebase States
           const [isFirebaseReady, setIsFirebaseReady] = useState(false);
@@ -412,7 +411,7 @@
             return () => unsubscribe();
           }, [isFirebaseReady]);
 
-          // Listen to Specific User Data (REAL-TIME SYNC)
+          // Listen to Specific User Data
           useEffect(() => {
             if (!currentUser || !isFirebaseReady || !db) return;
 
@@ -423,13 +422,11 @@
                         const data = docSnapshot.data();
                         setFavorites(new Set(data.favorites || []));
                         setMistakes(new Set(data.mistakes || []));
-                        setUserProgress(data.progress || {}); // Sync progress here!
                         setStatus('success');
                     } else {
                         // New user doc init handled in login
                         setFavorites(new Set());
                         setMistakes(new Set());
-                        setUserProgress({});
                         setStatus('success');
                     }
                 },
@@ -735,7 +732,6 @@
                         onExit={() => setMode('menu')} 
                         db={db}
                         collectionName={COLLECTION_NAME}
-                        progress={userProgress} // Pass current progress from App
                     />
                 )}
               </main>
@@ -907,32 +903,41 @@
         };
 
         // --- Waterfall Quiz View Component ---
-        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onSaveProgress, onResetProgress, onExit, db, collectionName, progress }) => {
+        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onSaveProgress, onResetProgress, onExit, db, collectionName }) => {
           const [quizData, setQuizData] = useState([]);
-          // 使用傳入的 progress 初始化，並確保後續更新時也更新
-          const [selections, setSelections] = useState(progress || {});
+          const [selections, setSelections] = useState({});
           
-          // Initial Load Quiz Data
+          // Initial Load
           useEffect(() => {
             const preparedData = data.map(item => {
               const options = shuffleArray([item.answer, ...item.distractors]);
               return { ...item, options };
             });
             setQuizData(preparedData);
-          }, [data]);
 
-          // Real-time sync: Update selections when progress prop changes
-          useEffect(() => {
-              setSelections(progress || {});
-          }, [progress]);
+            // Fetch progress from Firestore directly to be sure (though App passes no props for it, we rely on App's logic or fetch here. 
+            // In the App component, we didn't pass 'progress' state down, so let's fetch it once here or rely on parent.
+            // Improved flow: Fetch specifically for this component or use onSnapshot in App.
+            // For simplicity based on prompt constraints, we'll do a one-time fetch or listen here if not passed.
+            // Since App handles user doc snapshot but doesn't pass 'progress' object explicitly in props (I missed adding it to App state),
+            // let's do a quick fetch here to sync up.
+            
+            if(currentUser && db) {
+                 getDoc(doc(db, collectionName, currentUser)).then(docSnap => {
+                     if(docSnap.exists()) {
+                         setSelections(docSnap.data().progress || {});
+                     }
+                 });
+            }
+          }, [data, currentUser, db, collectionName]);
 
           const handleSelect = (questionId, option) => {
             const newSelections = {
               ...selections,
               [questionId]: option
             };
-            setSelections(newSelections); // Optimistic local update
-            // Save to Firestore (will trigger onSnapshot in App -> updates progress prop -> runs useEffect above)
+            setSelections(newSelections);
+            // Save to Firestore
             onSaveProgress(newSelections);
 
             // Sound and Confetti
@@ -953,7 +958,7 @@
           };
           
           const completedCount = Object.keys(selections).length;
-          const progressPercent = Math.round((completedCount / data.length) * 100);
+          const progress = Math.round((completedCount / data.length) * 100);
 
           return (
             <div className="max-w-4xl mx-auto pb-20">
@@ -994,7 +999,7 @@
                   <div className="w-full bg-orange-200 h-2.5 rounded-full overflow-hidden">
                     <div 
                         className="bg-orange-600 h-2.5 rounded-full progress-bar shadow-[0_0_10px_rgba(249,115,22,0.5)]" 
-                        style={{ width: `${progressPercent}%` }}
+                        style={{ width: `${progress}%` }}
                     ></div>
                   </div>
               </div>
@@ -1084,7 +1089,7 @@
               </div>
 
               {/* Bottom Complete Message */}
-              {progressPercent === 100 && (
+              {progress === 100 && (
                 <div className="mt-8 p-8 bg-green-100 rounded-2xl text-center border-2 border-green-300 animate-in zoom-in duration-300">
                     <h3 className="text-2xl font-bold text-green-800 mb-2">恭喜完成所有題目！</h3>
                     <p className="text-green-700">您已經完成了 {data.length} 題的練習。</p>
